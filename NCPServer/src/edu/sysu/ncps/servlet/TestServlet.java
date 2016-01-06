@@ -9,15 +9,21 @@ public class TestServlet extends BaseServlet {
 
 	private static final long serialVersionUID = 1L;
 
-	@Override
-	protected String check(JSONObject para) throws Exception {
-		return null;
+	protected class TestParaWrapper extends ParaWrapper {
+		protected String rString;
+		protected Integer oInt;
 	}
 
 	@Override
-	protected String main(JSONObject para, JSONObject json) throws Exception {
-		json.put("paraString", para.toString());
-		return null;
+	protected ParaWrapper createParaWrapper() {
+		return new TestParaWrapper();
 	}
 
+	@Override
+	protected String main(ParaWrapper wrapper, JSONObject json) throws Exception {
+		TestParaWrapper para = (TestParaWrapper) wrapper;
+		json.put("str", para.rString);
+		json.put("int", para.oInt);
+		return null;
+	}
 }
