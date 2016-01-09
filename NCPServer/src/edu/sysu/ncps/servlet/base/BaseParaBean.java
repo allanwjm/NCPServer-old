@@ -34,7 +34,7 @@ import java.util.List;
  * 
  * @author mura
  */
-public class BaseParaBean {
+public abstract class BaseParaBean {
 
 	/**
 	 * 将字符串List转换为整型List

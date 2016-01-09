@@ -5,11 +5,11 @@ package edu.sysu.ncps.servlet.base;
  * 
  * @author mura
  */
-public class InvalidBeanFieldException extends Exception {
+public class BeanFieldException extends Exception {
 
 	private static final long serialVersionUID = 1L;
 
-	public InvalidBeanFieldException(String msg) {
+	public BeanFieldException(String msg) {
 		super(msg);
 	}
 }

@@ -29,6 +29,6 @@ package edu.sysu.ncps.servlet.base;
  * 
  * @author mura
  */
-public class BaseJSONBean {
+public abstract class BaseJSONBean {
 
 }

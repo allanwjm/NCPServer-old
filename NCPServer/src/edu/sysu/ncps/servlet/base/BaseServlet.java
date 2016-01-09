@@ -3,6 +3,8 @@ package edu.sysu.ncps.servlet.base;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.reflect.Field;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
@@ -86,30 +88,6 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 	abstract protected void main(P para, J json, Servlet servlet) throws Exception;
 
 	/**
-	 * 处理异常, 并返回错误信息<br>
-	 * 默认的处理方法是打印至控制台和返回页面
-	 * 
-	 * @param servlet
-	 * @param e
-	 * @throws Exception
-	 *             允许再次抛出异常
-	 */
-	protected void handleException(Servlet servlet, Exception e) throws Exception {
-		defaultHandleException(servlet, e);
-	}
-
-	/**
-	 * 处理默认的默认方式, 不会再次抛出异常
-	 * 
-	 * @param servlet
-	 * @param e
-	 */
-	private final void defaultHandleException(Servlet servlet, Exception e) {
-		e.printStackTrace();
-		servlet.out.print(e.getMessage());
-	}
-
-	/**
 	 * doGet, 不直接使用此方法
 	 */
 	protected final void doGet(HttpServletRequest request, HttpServletResponse response)
@@ -155,7 +133,7 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 		JSONObject jsonObj = new JSONObject(null);
 
 		// 创建Servlet包装对象
-		Servlet servlet = new Servlet(request, response, out, jsonObj);
+		Servlet servlet = new Servlet(request, response, out);
 
 		try {
 			// 创建参数打包的对象
@@ -167,11 +145,13 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 			main(para, json, servlet);
 			assignJSONObject(json, jsonObj);
 
-			// 打印返回输出JSON对象
-			if (BROWSER_DEBUG) {
-				out.print(jsonObj.toFormatString());
-			} else {
-				out.print(jsonObj.toString());
+			if (servlet.print) {
+				// 打印返回输出JSON对象
+				if (BROWSER_DEBUG) {
+					out.print(jsonObj.toFormatString());
+				} else {
+					out.print(jsonObj.toString());
+				}
 			}
 
 		} catch (Exception e) {
@@ -184,7 +164,30 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 				defaultHandleException(servlet, e2);
 			}
 		}
+	}
 
+	/**
+	 * 处理异常, 并返回错误信息<br>
+	 * 默认的处理方法是打印至控制台和返回页面
+	 * 
+	 * @param servlet
+	 * @param e
+	 * @throws Exception
+	 *             允许再次抛出异常
+	 */
+	protected void handleException(Servlet servlet, Exception e) throws Exception {
+		defaultHandleException(servlet, e);
+	}
+
+	/**
+	 * 处理默认的默认方式, 不会再次抛出异常
+	 * 
+	 * @param servlet
+	 * @param e
+	 */
+	private final void defaultHandleException(Servlet servlet, Exception e) {
+		e.printStackTrace();
+		servlet.out.print(e.getMessage());
 	}
 
 	/**
@@ -194,14 +197,8 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 	 * @author mura
 	 */
 	private BaseParaBean createParaBean() throws Exception {
-		Class<?>[] classes = this.getClass().getClasses();
-		for (Class<?> clazz : classes) {
-			if (BaseParaBean.class.isAssignableFrom(clazz)) {
-				BaseParaBean bean = (BaseParaBean) clazz.newInstance();
-				return bean;
-			}
-		}
-		return null;
+		Class<?> clazz = getGenericType(0);
+		return (BaseParaBean) clazz.newInstance();
 	}
 
 	/**
@@ -226,7 +223,7 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 				// 必要参数
 				if (!paraMap.containsKey(fieldName)) {
 					// 必要参数不存在, 返回错误信息
-					throw new InvalidBeanFieldException("Missing required parameter: " + fieldName + ", type: "
+					throw new BeanFieldException("Missing required parameter: " + fieldName + ", type: "
 							+ TYPE_DESCRIPTION.get(field.getType()));
 				}
 			} else {
@@ -265,10 +262,10 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 	 * @param type
 	 *            类型
 	 * @return 分析后的Object
-	 * @throws InvalidBeanFieldException
+	 * @throws BeanFieldException
 	 *             由于Bean的类型不正确导致的异常
 	 */
-	private Object parseParaValue(String key, String value, Class<?> type) throws InvalidBeanFieldException {
+	private Object parseParaValue(String key, String value, Class<?> type) throws BeanFieldException {
 		try {
 			if (type.equals(Integer.class)) {
 				return Integer.parseInt(value);
@@ -281,11 +278,10 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 			} else if (type.equals(byte[].class)) {
 				return Base64.getDecoder().decode(value);
 			} else {
-				throw new InvalidBeanFieldException(
-						"Invalid ParaBean field: " + key + " type: " + TYPE_DESCRIPTION.get(type));
+				throw new BeanFieldException("Invalid ParaBean field: " + key + " type: " + TYPE_DESCRIPTION.get(type));
 			}
 		} catch (IllegalArgumentException e) {
-			throw new InvalidBeanFieldException(
+			throw new BeanFieldException(
 					"Cannot parse field: " + key + " ,value: " + value + ", into type: " + TYPE_DESCRIPTION.get(type));
 		}
 	}
@@ -297,14 +293,8 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 	 * @throws Exception
 	 */
 	private BaseJSONBean createJSONBean() throws Exception {
-		Class<?>[] classes = this.getClass().getClasses();
-		for (Class<?> clazz : classes) {
-			if (BaseJSONBean.class.isAssignableFrom(clazz)) {
-				BaseJSONBean bean = (BaseJSONBean) clazz.newInstance();
-				return bean;
-			}
-		}
-		return null;
+		Class<?> clazz = getGenericType(1);
+		return (BaseJSONBean) clazz.newInstance();
 	}
 
 	/**
@@ -359,11 +349,11 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 	 * @param type
 	 *            值类型
 	 * @return 生成的JSONVariable对象
-	 * @throws InvalidBeanFieldException
+	 * @throws BeanFieldException
 	 *             由于Bean的类型不正确导致的异常
 	 */
 	@SuppressWarnings("rawtypes")
-	private JSONVariable createJSONVariable(String key, Object value, Class<?> type) throws InvalidBeanFieldException {
+	private JSONVariable createJSONVariable(String key, Object value, Class<?> type) throws BeanFieldException {
 		if (type.equals(Integer.class)) {
 			return new JSONInteger(key, (Integer) value);
 		} else if (type.equals(Float.class)) {
@@ -375,8 +365,27 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 		} else if (type.equals(byte[].class)) {
 			return new JSONData(key, (byte[]) value);
 		} else {
-			throw new InvalidBeanFieldException("Invalid JSONBean field: " + key + ", type: " + type.getName());
+			throw new BeanFieldException("Invalid JSONBean field: " + key + ", type: " + type.getName());
 		}
+	}
+
+	private Class<?> getGenericType(int index) {
+
+		Type genType = getClass().getGenericSuperclass();
+		if (!(genType instanceof ParameterizedType)) {
+			return Object.class;
+		}
+
+		Type[] params = ((ParameterizedType) genType).getActualTypeArguments();
+		if (index >= params.length || index < 0) {
+			throw new RuntimeException("Index outof bounds");
+		}
+
+		if (!(params[index] instanceof Class)) {
+			return Object.class;
+		}
+
+		return (Class<?>) params[index];
 	}
 
 	/**
@@ -402,36 +411,39 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 		public final PrintWriter out;
 
 		/**
-		 * 输出用JSON对象
-		 */
-		public final JSONObject jsonObj;
-
-		/**
 		 * 是否正在处理异常标识位
 		 */
 		public boolean catching;
 
 		/**
+		 * 是否打印输出JSON标识位
+		 */
+		public boolean print;
+
+		/**
 		 * 构造方法
 		 */
-		public Servlet(HttpServletRequest request, HttpServletResponse response, PrintWriter out, JSONObject jsonObj) {
+		public Servlet(HttpServletRequest request, HttpServletResponse response, PrintWriter out) {
 			this.request = request;
 			this.response = response;
 			this.out = out;
-			this.jsonObj = jsonObj;
 			this.catching = false;
+			this.print = true;
 		}
 
 		/**
 		 * (!只可在异常处理中调用)<br>
 		 * 打印JSON格式Bean, 在出现了异常的情况下仍然进行返回<br>
-		 * 此类型与泛型类型可以不同
+		 * 此类型与泛型类型可以不同, 在<b>main</b>中已经进行的赋值也会无效(重新创建的JSON对象)
 		 * 
 		 * @param json
+		 * @throws Exception
 		 */
-		public void printJSON(BaseJSONBean json) {
+		public void forcePrintJSON(BaseJSONBean json) throws Exception {
 			if (this.catching) {
-
+				// 创建一个新的JSONObject对象
+				JSONObject jsonObj = new JSONObject(null);
+				assignJSONObject(json, jsonObj);
 				// 打印返回输出JSON对象
 				if (BROWSER_DEBUG) {
 					out.print(jsonObj.toFormatString());
@@ -439,6 +451,14 @@ public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean
 					out.print(jsonObj.toString());
 				}
 			}
+		}
+
+		/**
+		 * (!只可在<b>main</b>中调用)<br>
+		 * 在服务结束时, 跳过打印JSON字符串
+		 */
+		public void skipPrintJSON() {
+			this.print = false;
 		}
 	}
 }
