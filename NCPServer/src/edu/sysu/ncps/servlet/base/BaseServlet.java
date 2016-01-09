@@ -1,4 +1,4 @@
-package edu.sysu.ncps.servlet;
+package edu.sysu.ncps.servlet.base;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -46,17 +46,17 @@ import org.mura.json.JSONVariable;
  * @param <J>
  *            JSONBean类型
  */
-public abstract class BaseServlet<P, J> extends HttpServlet {
+public abstract class BaseServlet<P extends BaseParaBean, J extends BaseJSONBean> extends HttpServlet {
 
 	private static final long serialVersionUID = 1L;
 
 	/**
 	 * 是否使用浏览器调试标识位(影响返回的格式)
 	 */
-	private static final boolean BROWSER_DEBUG = true;
+	protected static final boolean BROWSER_DEBUG = true;
 
 	// 用于更清晰地在错误信息中类型名, 设置一组类型名和Java类型的映射
-	public static final Map<Class<?>, String> TYPE_DESCRIPTION = new HashMap<Class<?>, String>() {
+	protected static final Map<Class<?>, String> TYPE_DESCRIPTION = new HashMap<Class<?>, String>() {
 
 		private static final long serialVersionUID = 1L;
 
@@ -89,20 +89,30 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 * 处理异常, 并返回错误信息<br>
 	 * 默认的处理方法是打印至控制台和返回页面
 	 * 
-	 * @param out
-	 *            PrintWriter对象
+	 * @param servlet
 	 * @param e
-	 *            异常对象
+	 * @throws Exception
+	 *             允许再次抛出异常
 	 */
-	protected void handleException(PrintWriter out, Exception e) {
+	protected void handleException(Servlet servlet, Exception e) throws Exception {
+		defaultHandleException(servlet, e);
+	}
+
+	/**
+	 * 处理默认的默认方式, 不会再次抛出异常
+	 * 
+	 * @param servlet
+	 * @param e
+	 */
+	private final void defaultHandleException(Servlet servlet, Exception e) {
 		e.printStackTrace();
-		out.print(e.getMessage());
+		servlet.out.print(e.getMessage());
 	}
 
 	/**
 	 * doGet, 不直接使用此方法
 	 */
-	final protected void doGet(HttpServletRequest request, HttpServletResponse response)
+	protected final void doGet(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 		handleRequest(request, response);
 	}
@@ -110,7 +120,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	/**
 	 * doPost, 不直接使用此方法
 	 */
-	final protected void doPost(HttpServletRequest request, HttpServletResponse response)
+	protected final void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 		handleRequest(request, response);
 	}
@@ -141,26 +151,23 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 		// 获取PrintWriter对象
 		PrintWriter out = response.getWriter();
 
-		try {
-			// 创建输出JSON对象
-			JSONObject jsonObj = new JSONObject(null);
+		// 创建输出JSON对象
+		JSONObject jsonObj = new JSONObject(null);
 
+		// 创建Servlet包装对象
+		Servlet servlet = new Servlet(request, response, out, jsonObj);
+
+		try {
 			// 创建参数打包的对象
 			P para = (P) createParaBean();
-			assignParaBean(request, para);
 			J json = (J) createJSONBean();
-
-			// 创建Servlet包装对象
-			Servlet servlet = new Servlet();
-			servlet.request = request;
-			servlet.response = response;
-			servlet.out = out;
+			assignParaBean(request, para);
 
 			// 调用主方法处理请求
 			main(para, json, servlet);
-
-			// 返回输出JSON对象生成的字符串
 			assignJSONObject(json, jsonObj);
+
+			// 打印返回输出JSON对象
 			if (BROWSER_DEBUG) {
 				out.print(jsonObj.toFormatString());
 			} else {
@@ -169,101 +176,15 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 
 		} catch (Exception e) {
 			// 捕获并处理异常, 返回相应信息
-			handleException(out, e);
-		}
-	}
-
-	/**
-	 * 请求参数Bean基类, 继承后使用<br>
-	 * 需要在Servlet的子类中自定义一个静态内部类, 必须继承自此类<br>
-	 * 需要定义为<b>public</b>不然不能被反射获取<br>
-	 * 只要定义一个, 即使定义多个也只有一个会起作用
-	 * <p>
-	 * 在子类中, 需要用成员变量定义从客户端发来的参数及其类型, 变量格式如下:<br>
-	 * 访问标识: public<br>
-	 * 变量名: 同请求参数的键名<br>
-	 * 若为可选参数, 在键名前加<b>'_'</b>作为前缀以示区分<br>
-	 * 在请求中出现了而在<b>Servlet</b>没有处理的参数, 不会影响执行, 不能被获取(想要获取, 请设置为可选变量)
-	 * <p>
-	 * 类型关系表: (JSON -> Java)<br>
-	 * Integer -> <b>Integer</b><br>
-	 * Float -> <b>Float</b><br>
-	 * Bool -> <b>Boolean</b><br>
-	 * String -> <b>String</b><br>
-	 * Data -> <b>byte[]</b><br>
-	 * &lt;Any&gt;Array -> <b>List&lt;String&gt;</b><br>
-	 * (!)由于泛型限制, 数组只能保存字符串值, 需要取出后自行进行类型转换<br>
-	 * 定义其它类型的成员变量可能导致问题!
-	 * <p>
-	 * 变量命名举例:<br>
-	 * <b>public String</b> comment;<br>
-	 * 对应<b>String</b>类型的名为<b>comment</b>的必要参数<br>
-	 * <b>public byte[]</b> _image;<br>
-	 * 对应<b>Data</b>类型的名为<b>image</b>的可选参数
-	 * 
-	 * @author mura
-	 */
-	public static class BaseParaBean {
-
-		/**
-		 * 将字符串List转换为整型List
-		 * 
-		 * @param list
-		 *            字符串List
-		 * @return 整型List
-		 */
-		public static List<Integer> convertIntegerList(List<String> list) {
-			List<Integer> tList = new ArrayList<Integer>();
-			for (String str : list) {
-				tList.add(Integer.parseInt(str));
+			servlet.catching = true;
+			try {
+				handleException(servlet, e);
+			} catch (Exception e2) {
+				// 如果仍然抛出错误, 改用默认方式处理异常
+				defaultHandleException(servlet, e2);
 			}
-			return tList;
 		}
 
-		/**
-		 * 将字符串List转换为浮点型List
-		 * 
-		 * @param list
-		 *            字符串List
-		 * @return 浮点型List
-		 */
-		public static List<Float> convertFloatList(List<String> list) {
-			List<Float> tList = new ArrayList<Float>();
-			for (String str : list) {
-				tList.add(Float.parseFloat(str));
-			}
-			return tList;
-		}
-
-		/**
-		 * 将字符串List转换为布尔型List
-		 * 
-		 * @param list
-		 *            字符串List
-		 * @return 布尔型List
-		 */
-		public static List<Boolean> convertBoolList(List<String> list) {
-			List<Boolean> tList = new ArrayList<Boolean>();
-			for (String str : list) {
-				tList.add(Boolean.parseBoolean(str));
-			}
-			return tList;
-		}
-
-		/**
-		 * 将字符串List转换为二进制型List
-		 * 
-		 * @param list
-		 *            字符串List
-		 * @return 二进制型List
-		 */
-		public static List<byte[]> convertDataList(List<String> list) {
-			List<byte[]> tList = new ArrayList<byte[]>();
-			for (String str : list) {
-				tList.add(Base64.getDecoder().decode(str));
-			}
-			return tList;
-		}
 	}
 
 	/**
@@ -292,7 +213,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 *            请求参数Bean
 	 * @throws Exception
 	 */
-	private void assignParaBean(HttpServletRequest request, P bean) throws Exception {
+	private void assignParaBean(HttpServletRequest request, BaseParaBean bean) throws Exception {
 
 		// 获取请求参数Map
 		Map<String, String[]> paraMap = request.getParameterMap();
@@ -370,39 +291,6 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	}
 
 	/**
-	 * JSON格式Bean基类, 继承后使用<br>
-	 * 需要在Servlet的子类中自定义一个静态内部类, 必须继承自此类<br>
-	 * 需要定义为<b>public</b>不然不能被反射获取<br>
-	 * 只要定义一个, 即使定义多个也只有一个会起作用
-	 * <p>
-	 * 在子类中, 需要用成员变量定义将要返回的JSON键值对及其类型, 变量格式如下:<br>
-	 * 访问标识: public<br>
-	 * 变量名: 同键值对的键名<br>
-	 * 若为可选键值对, 在键名前加<b>'_'</b>作为前缀以示区分<br>
-	 * 必要键值对将一定被返回, 如果没有赋值时将会返回<b>null</b>, 可选键值对只在有值时返回
-	 * <p>
-	 * 类型关系表: (JSON -> Java)<br>
-	 * Integer -> <b>Integer</b><br>
-	 * Float -> <b>Float</b><br>
-	 * Bool -> <b>Boolean</b><br>
-	 * String -> <b>String</b><br>
-	 * Data -> <b>byte[]</b><br>
-	 * &lt;Any&gt;Array -> <b>List&lt;(上述类型)&gt;</b><br>
-	 * 定义其它类型的成员变量可能导致问题!
-	 * <p>
-	 * 变量命名举例:<br>
-	 * <b>private String</b> comment;<br>
-	 * 对应<b>String</b>类型的名为<b>comment</b>的必要键值对<br>
-	 * <b>private byte[]</b> _image;<br>
-	 * 对应<b>Data</b>类型的名为<b>image</b>的可选键值对
-	 * 
-	 * @author mura
-	 */
-	public static class BaseJSONBean {
-
-	}
-
-	/**
 	 * 生成一个JSON格式Bean
 	 * 
 	 * @author mura
@@ -428,7 +316,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 *            JSON对象
 	 * @throws Exception
 	 */
-	private void assignJSONObject(J bean, JSONObject json) throws Exception {
+	private void assignJSONObject(BaseJSONBean bean, JSONObject json) throws Exception {
 		// 获取成员变量数组并遍历
 		Field[] fields = bean.getClass().getFields();
 		for (Field field : fields) {
@@ -492,40 +380,65 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	}
 
 	/**
-	 * 请求参数Bean或JSON格式Bean成员变量错误而引发的异常
-	 * 
-	 * @author mura
-	 */
-	public static class InvalidBeanFieldException extends Exception {
-
-		private static final long serialVersionUID = 1L;
-
-		public InvalidBeanFieldException(String msg) {
-			super(msg);
-		}
-	}
-
-	/**
 	 * 将Servlet中的各种对象包装类, 提供未包装的对象访问, 允许实现自定义的复杂功能
 	 * 
 	 * @author mura
 	 */
-	public static class Servlet {
+	public class Servlet {
 
 		/**
 		 * 请求对象
 		 */
-		public HttpServletRequest request;
+		public final HttpServletRequest request;
 
 		/**
 		 * 应答对象
 		 */
-		public HttpServletResponse response;
+		public final HttpServletResponse response;
 
 		/**
-		 * 输出对象
+		 * 输出流对象
 		 */
-		public PrintWriter out;
-	}
+		public final PrintWriter out;
 
+		/**
+		 * 输出用JSON对象
+		 */
+		public final JSONObject jsonObj;
+
+		/**
+		 * 是否正在处理异常标识位
+		 */
+		public boolean catching;
+
+		/**
+		 * 构造方法
+		 */
+		public Servlet(HttpServletRequest request, HttpServletResponse response, PrintWriter out, JSONObject jsonObj) {
+			this.request = request;
+			this.response = response;
+			this.out = out;
+			this.jsonObj = jsonObj;
+			this.catching = false;
+		}
+
+		/**
+		 * (!只可在异常处理中调用)<br>
+		 * 打印JSON格式Bean, 在出现了异常的情况下仍然进行返回<br>
+		 * 此类型与泛型类型可以不同
+		 * 
+		 * @param json
+		 */
+		public void printJSON(BaseJSONBean json) {
+			if (this.catching) {
+
+				// 打印返回输出JSON对象
+				if (BROWSER_DEBUG) {
+					out.print(jsonObj.toFormatString());
+				} else {
+					out.print(jsonObj.toString());
+				}
+			}
+		}
+	}
 }

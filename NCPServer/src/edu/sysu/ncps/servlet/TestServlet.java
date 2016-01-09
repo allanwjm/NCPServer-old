@@ -2,17 +2,21 @@ package edu.sysu.ncps.servlet;
 
 import javax.servlet.annotation.WebServlet;
 
+import edu.sysu.ncps.servlet.base.BaseJSONBean;
+import edu.sysu.ncps.servlet.base.BaseParaBean;
+import edu.sysu.ncps.servlet.base.BaseServlet;
+
 @WebServlet("/test")
 public class TestServlet extends BaseServlet<TestServlet.Bean, TestServlet.JSON> {
 
 	private static final long serialVersionUID = 1L;
 
-	public static class Bean extends BaseServlet.BaseParaBean {
+	public static class Bean extends BaseParaBean {
 		public String _str;
 		public Integer _i;
 	}
 
-	public static class JSON extends BaseServlet.BaseJSONBean {
+	public static class JSON extends BaseJSONBean {
 		public String result;
 	}
 
