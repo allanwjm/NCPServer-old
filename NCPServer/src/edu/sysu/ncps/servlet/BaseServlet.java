@@ -23,6 +23,29 @@ import org.mura.json.JSONObject;
 import org.mura.json.JSONString;
 import org.mura.json.JSONVariable;
 
+/**
+ * Servlet基类, 继承此类后开发实现具体功能的Servlet
+ * <p>
+ * 实现一个新的子类需要做的工作:
+ * <p>
+ * 1、需要设置两个Bean(输入与输出)的类型:<br>
+ * <b>P</b>为请求参数Bean的类型, 请求参数类应继承自<b>BaseServlet.BaseParaBean</b><br>
+ * <b>J</b>为JSON格式Bean的类型, 请求参数类应继承自<b>BaseServlet.BaseJSONBean</b><br>
+ * 子类具体的格式请参照两个父类的Javadoc说明
+ * <p>
+ * 2、需要实现主方法:<br>
+ * 在<b>main</b>方法中处理请求<br>
+ * 请求参数可以在传入的<b>para</b>对象中获得, 然后将返回内容写在<b>json</b>对象中<br>
+ * 如果出现异常可以直接<b>throw</b>, 将会显示错误信息, 方便调试
+ * 
+ * @author mura
+ *
+ * @param
+ * 			<P>
+ *            ParaBean类型
+ * @param <J>
+ *            JSONBean类型
+ */
 public abstract class BaseServlet<P, J> extends HttpServlet {
 
 	private static final long serialVersionUID = 1L;
@@ -51,14 +74,16 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	/**
 	 * 处理请求的主方法
 	 * 
-	 * @param paraBean
+	 * @param para
 	 *            请求参数Bean, 需继承自BaseParaBean
-	 * @param jsonBean
+	 * @param json
 	 *            JSON格式Bean, 需继承自BaseJSONBean
+	 * @param servlet
+	 *            提供未包装的对象访问, 除非必要, 不要用
 	 * @throws Exception
 	 *             如果处理过程出现异常, 抛出异常中断请求处理
 	 */
-	abstract protected void main(P para, J json) throws Exception;
+	abstract protected void main(P para, J json, Servlet servlet) throws Exception;
 
 	/**
 	 * 处理异常, 并返回错误信息<br>
@@ -71,7 +96,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 */
 	protected void handleException(PrintWriter out, Exception e) {
 		e.printStackTrace();
-		e.printStackTrace(out);
+		out.print(e.getMessage());
 	}
 
 	/**
@@ -79,7 +104,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 */
 	final protected void doGet(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
-		doGetOrPost(request, response);
+		handleRequest(request, response);
 	}
 
 	/**
@@ -87,7 +112,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 */
 	final protected void doPost(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
-		doGetOrPost(request, response);
+		handleRequest(request, response);
 	}
 
 	/**
@@ -97,10 +122,11 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 *            请求对象
 	 * @param response
 	 *            应答对象
-	 * @throws Exception
+	 * @throws ServletException
+	 * @throws IOException
 	 */
 	@SuppressWarnings("unchecked")
-	private void doGetOrPost(HttpServletRequest request, HttpServletResponse response)
+	private void handleRequest(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 
 		// 设置编码格式
@@ -117,29 +143,34 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 
 		try {
 			// 创建输出JSON对象
-			JSONObject json = new JSONObject(null);
+			JSONObject jsonObj = new JSONObject(null);
 
 			// 创建参数打包的对象
-			P paraBean = (P) createParaBean();
-			assignParaBean(request, paraBean);
-			J jsonBean = (J) createJSONBean();
+			P para = (P) createParaBean();
+			assignParaBean(request, para);
+			J json = (J) createJSONBean();
+
+			// 创建Servlet包装对象
+			Servlet servlet = new Servlet();
+			servlet.request = request;
+			servlet.response = response;
+			servlet.out = out;
 
 			// 调用主方法处理请求
-			main(paraBean, jsonBean);
+			main(para, json, servlet);
 
 			// 返回输出JSON对象生成的字符串
-			assignJSONObject(jsonBean, json);
+			assignJSONObject(json, jsonObj);
 			if (BROWSER_DEBUG) {
-				out.print(json.toFormatString());
+				out.print(jsonObj.toFormatString());
 			} else {
-				out.print(json.toString());
+				out.print(jsonObj.toString());
 			}
 
 		} catch (Exception e) {
 			// 捕获并处理异常, 返回相应信息
 			handleException(out, e);
 		}
-
 	}
 
 	/**
@@ -274,7 +305,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 				// 必要参数
 				if (!paraMap.containsKey(fieldName)) {
 					// 必要参数不存在, 返回错误信息
-					throw new InvalidBeanFieldTypeException("Missing required parameter: " + fieldName + ", type: "
+					throw new InvalidBeanFieldException("Missing required parameter: " + fieldName + ", type: "
 							+ TYPE_DESCRIPTION.get(field.getType()));
 				}
 			} else {
@@ -291,13 +322,14 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 				// Bean中规定此值为数组, 根据数组进行赋值
 				List<String> list = new ArrayList<String>();
 				for (String value : paraMap.get(fieldName)) {
+					// 作为字符串形式存储, 如果需要转换, 通过其它静态方法再转换
 					list.add(value);
 				}
 				field.set(bean, list);
 			} else {
 				// 此值不为数组, 直接赋第一个值
 				String value = paraMap.get(fieldName)[0];
-				field.set(bean, parseParaValue(value, fieldType));
+				field.set(bean, parseParaValue(fieldName, value, fieldType));
 			}
 		}
 	}
@@ -305,15 +337,17 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	/**
 	 * 将字符串形式的请求参数分析为特定的类型
 	 * 
+	 * @param key
+	 *            该参数的键名
 	 * @param value
 	 *            字符串参数
 	 * @param type
 	 *            类型
 	 * @return 分析后的Object
-	 * @throws InvalidBeanFieldTypeException
+	 * @throws InvalidBeanFieldException
 	 *             由于Bean的类型不正确导致的异常
 	 */
-	private Object parseParaValue(String value, Class<?> type) throws InvalidBeanFieldTypeException {
+	private Object parseParaValue(String key, String value, Class<?> type) throws InvalidBeanFieldException {
 		try {
 			if (type.equals(Integer.class)) {
 				return Integer.parseInt(value);
@@ -326,10 +360,12 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 			} else if (type.equals(byte[].class)) {
 				return Base64.getDecoder().decode(value);
 			} else {
-				throw new InvalidBeanFieldTypeException("Invalid ParaBean field type: " + TYPE_DESCRIPTION.get(type));
+				throw new InvalidBeanFieldException(
+						"Invalid ParaBean field: " + key + " type: " + TYPE_DESCRIPTION.get(type));
 			}
 		} catch (IllegalArgumentException e) {
-			throw new InvalidBeanFieldTypeException("Cannot parse: " + value + " into " + TYPE_DESCRIPTION.get(type));
+			throw new InvalidBeanFieldException(
+					"Cannot parse field: " + key + " ,value: " + value + ", into type: " + TYPE_DESCRIPTION.get(type));
 		}
 	}
 
@@ -405,9 +441,9 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 				JSONArray array = new JSONArray(fieldName);
 				for (Object item : fieldValue) {
 					Class<?> itemType = item.getClass();
-					array.put(createJSONVariable(null, item, itemType));
+					array.add(createJSONVariable(null, item, itemType));
 				}
-				json.put(array);
+				json.add(array);
 			} else {
 				// 单个值类型
 				Object fieldValue = field.get(bean);
@@ -419,7 +455,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 					}
 				}
 				// 赋值
-				json.put(createJSONVariable(fieldName, fieldValue, fieldType));
+				json.add(createJSONVariable(fieldName, fieldValue, fieldType));
 			}
 
 		}
@@ -435,11 +471,11 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 * @param type
 	 *            值类型
 	 * @return 生成的JSONVariable对象
-	 * @throws InvalidBeanFieldTypeException
+	 * @throws InvalidBeanFieldException
 	 *             由于Bean的类型不正确导致的异常
 	 */
-	private JSONVariable createJSONVariable(String key, Object value, Class<?> type)
-			throws InvalidBeanFieldTypeException {
+	@SuppressWarnings("rawtypes")
+	private JSONVariable createJSONVariable(String key, Object value, Class<?> type) throws InvalidBeanFieldException {
 		if (type.equals(Integer.class)) {
 			return new JSONInteger(key, (Integer) value);
 		} else if (type.equals(Float.class)) {
@@ -451,8 +487,7 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 		} else if (type.equals(byte[].class)) {
 			return new JSONData(key, (byte[]) value);
 		} else {
-			throw new InvalidBeanFieldTypeException(
-					"Invalid JSON field: " + key + " type: " + TYPE_DESCRIPTION.get(type));
+			throw new InvalidBeanFieldException("Invalid JSONBean field: " + key + ", type: " + type.getName());
 		}
 	}
 
@@ -461,12 +496,36 @@ public abstract class BaseServlet<P, J> extends HttpServlet {
 	 * 
 	 * @author mura
 	 */
-	public static class InvalidBeanFieldTypeException extends Exception {
+	public static class InvalidBeanFieldException extends Exception {
 
 		private static final long serialVersionUID = 1L;
 
-		public InvalidBeanFieldTypeException(String msg) {
+		public InvalidBeanFieldException(String msg) {
 			super(msg);
 		}
 	}
+
+	/**
+	 * 将Servlet中的各种对象包装类, 提供未包装的对象访问, 允许实现自定义的复杂功能
+	 * 
+	 * @author mura
+	 */
+	public static class Servlet {
+
+		/**
+		 * 请求对象
+		 */
+		public HttpServletRequest request;
+
+		/**
+		 * 应答对象
+		 */
+		public HttpServletResponse response;
+
+		/**
+		 * 输出对象
+		 */
+		public PrintWriter out;
+	}
+
 }

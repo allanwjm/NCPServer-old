@@ -8,7 +8,7 @@ public class TestServlet extends BaseServlet<TestServlet.Bean, TestServlet.JSON>
 	private static final long serialVersionUID = 1L;
 
 	public static class Bean extends BaseServlet.BaseParaBean {
-		public String str;
+		public String _str;
 		public Integer _i;
 	}
 
@@ -17,8 +17,7 @@ public class TestServlet extends BaseServlet<TestServlet.Bean, TestServlet.JSON>
 	}
 
 	@Override
-	protected void main(Bean para, JSON json) throws Exception {
-		json.result = para.str + "(" + para._i + ")";
+	protected void main(Bean para, JSON json, Servlet servlet) throws Exception {
+		json.result = para._str + "(" + para._i + ")";
 	}
-
 }
