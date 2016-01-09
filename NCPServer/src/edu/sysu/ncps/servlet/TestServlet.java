@@ -2,28 +2,23 @@ package edu.sysu.ncps.servlet;
 
 import javax.servlet.annotation.WebServlet;
 
-import org.mura.json.JSONObject;
-
 @WebServlet("/test")
-public class TestServlet extends BaseServlet {
+public class TestServlet extends BaseServlet<TestServlet.Bean, TestServlet.JSON> {
 
 	private static final long serialVersionUID = 1L;
 
-	protected class TestParaWrapper extends ParaWrapper {
-		protected String rString;
-		protected Integer oInt;
+	public static class Bean extends BaseServlet.BaseParaBean {
+		public String str;
+		public Integer _i;
+	}
+
+	public static class JSON extends BaseServlet.BaseJSONBean {
+		public String result;
 	}
 
 	@Override
-	protected ParaWrapper createParaWrapper() {
-		return new TestParaWrapper();
+	protected void main(Bean para, JSON json) throws Exception {
+		json.result = para.str + "(" + para._i + ")";
 	}
 
-	@Override
-	protected String main(ParaWrapper wrapper, JSONObject json) throws Exception {
-		TestParaWrapper para = (TestParaWrapper) wrapper;
-		json.put("str", para.rString);
-		json.put("int", para.oInt);
-		return null;
-	}
 }
