@@ -1,13 +1,13 @@
 package edu.sysu.ncps.servlet;
 
-import edu.sysu.ncps.servlet.base.BaseJSONBean;
-import edu.sysu.ncps.servlet.base.BaseServlet;
+import org.mura.servlet.BaseServlet;
+import org.mura.servlet.JSONBean;
 
 public abstract class NCPServlet<P, J> extends BaseServlet<NCPPara, NCPJSON> {
 
 	private static final long serialVersionUID = 1L;
 
-	public static class NCPErrorJSON extends BaseJSONBean {
+	public static class NCPErrorJSON extends JSONBean {
 		public Boolean success;
 		public String exception;
 		public String message;
@@ -31,5 +31,4 @@ public abstract class NCPServlet<P, J> extends BaseServlet<NCPPara, NCPJSON> {
 		error.message = e.getMessage();
 		servlet.forcePrintJSON(error);
 	}
-
 }

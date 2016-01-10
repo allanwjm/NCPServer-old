@@ -1,4 +1,4 @@
-package edu.sysu.ncps;
+package edu.sysu.ncps.servlet;
 
 public class Test {
 

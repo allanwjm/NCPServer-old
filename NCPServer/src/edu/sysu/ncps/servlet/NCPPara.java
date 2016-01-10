@@ -1,7 +1,7 @@
 package edu.sysu.ncps.servlet;
 
-import edu.sysu.ncps.servlet.base.BaseParaBean;
+import org.mura.servlet.ParaBean;
 
-public class NCPPara extends BaseParaBean {
+public class NCPPara extends ParaBean {
 	public String token;
 }

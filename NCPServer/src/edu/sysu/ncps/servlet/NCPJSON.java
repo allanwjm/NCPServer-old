@@ -1,7 +1,7 @@
 package edu.sysu.ncps.servlet;
 
-import edu.sysu.ncps.servlet.base.BaseJSONBean;
+import org.mura.servlet.JSONBean;
 
-public class NCPJSON extends BaseJSONBean {
+public class NCPJSON extends JSONBean {
 	public Boolean success;
 }
